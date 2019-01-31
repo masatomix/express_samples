@@ -18,6 +18,7 @@ const server = app.listen(3000, function() {
 })
 
 import config from './config'
+import * as util from 'util'
 
 let mysqlPool
 
@@ -29,6 +30,7 @@ app
     console.log("Request 受信")
     if (!mysqlPool) {
       mysqlPool = mysql.createPool(config)
+      mysqlPool.query = util.promisify(mysqlPool.query)
     }
     next()
   })
@@ -36,73 +38,64 @@ app
   // findAll
   // status 200
   // 結果配列を返す
-  .get((req, res) => {
+  .get(async (req, res) => {
     console.log("find all")
-    mysqlPool.query("select * from  USER_MASTER;", (err, rows) => {
-      if (err) {
-        console.log("err: " + err)
-        res.status(500).send(err)
-      }
-      if(rows.length ===0){
+    try{
+      const rows = await mysqlPool.query("select * from  USER_MASTER;")
+      if(rows.length === 0){
         res.status(404).send()
         return
       }
       res.json(rows)
-    })
+    }catch(err){
+      console.log("err: " + err)
+      res.status(500).send(err)
+    }
   })
 
   // create
   // status 201
   // 作成したオブジェクトを返す
-  .post((req, res) => {
+  .post(async (req, res) => {
     console.log("create")
     const user = req.body
     console.log(JSON.stringify(user))
-    
-    mysqlPool.query(
-      "insert into USER_MASTER set ?",user,(err, rows) => {
-        if (err) {
-          console.log("err: " + err)
-          res.status(500).send(err)
-        }
-        mysqlPool.query(
+   
+    try{
+      await mysqlPool.query(
+        "insert into USER_MASTER set ?",user)
+      const rows = await mysqlPool.query(
           "select * from  USER_MASTER where COMPANY_CD = ? and LOGIN_ID = ? ;",
-          [user.COMPANY_CD, user.LOGIN_ID],
-          (err, rows) => {
-            if (err) {
-              console.log("err: " + err)
-              res.status(500).send(err)
-            }
-            res.status(201).json(rows[0])
-          }
-        )
-      })
+          [user.COMPANY_CD, user.LOGIN_ID])
+      res.status(201).json(rows[0])
+    }catch(err){
+      console.log("err: " + err)
+      res.status(500).send(err)
+    }
   })
 
   // update
-  // status 204
-  // 作成したオブジェクトを返す?
-  .put((req, res) => {
+  // status 200
+  // 作成したオブジェクトを返す
+  .put(async (req, res) => {
     console.log("update")
     const user = req.body
     console.log(JSON.stringify(user))
-
     const companyCode = user.COMPANY_CD
     const loginId = user.LOGIN_ID
     const userName = user.USER_NAME
-    mysqlPool.query(
-      "update USER_MASTER set COMPANY_CD = ? ,LOGIN_ID = ? ,USER_NAME = ? where COMPANY_CD = ? and LOGIN_ID = ?",[companyCode,loginId,userName,companyCode,loginId],(err, rows) => {
-        if (err) {
-          console.log("err: " + err)
-          res.status(500).send(err)
-        }
-        res.status(204).send()
-      })
+    try{
+      const rows = await mysqlPool.query(
+        "update USER_MASTER set COMPANY_CD = ? ,LOGIN_ID = ? ,USER_NAME = ? where COMPANY_CD = ? and LOGIN_ID = ?",
+        [companyCode, loginId, userName, companyCode, loginId]
+      );
+      res.status(200).json(rows[0])
+      // res.status(204).send();
+    }catch(err){
+      console.log("err: " + err)
+      res.status(500).send(err)
+    }
   })
-
-
-
-import * as util from 'util'
 
 // PK検索
 // status 200
@@ -111,14 +104,14 @@ app.get("/users/:key1/:key2",async (req, res) => {
   console.log("find by pk")
   if (!mysqlPool) {
     mysqlPool = mysql.createPool(config)
+    mysqlPool.query = util.promisify(mysqlPool.query)
   }
 
-  mysqlPool.query = util.promisify(mysqlPool.query)
   try{
     const rows = await mysqlPool.query(
       "select * from  USER_MASTER where COMPANY_CD = ? and LOGIN_ID = ? ;",
       [req.params.key1, req.params.key2])
-    if(rows.length ===0){
+    if(rows.length === 0){
       res.status(404).send()
       return
     }
@@ -126,7 +119,6 @@ app.get("/users/:key1/:key2",async (req, res) => {
   }catch(err){
     console.log("err: " + err)
     res.status(500).send(err)
-    return
   }
 
   // 上記は、下記のオリジナルと等価(コールバックよりわかりやすい、、かな？)
@@ -149,24 +141,22 @@ app.get("/users/:key1/:key2",async (req, res) => {
 })
 
 // delete
-// status 200？
+// status 204
 // 空データを返す
-app.delete("/users/:key1/:key2", (req, res) => {
+app.delete("/users/:key1/:key2", async (req, res) => {
   console.log('delete')
   if (!mysqlPool) {
     mysqlPool = mysql.createPool(config)
+    mysqlPool.query = util.promisify(mysqlPool.query)
   }
 
-  mysqlPool.query(
-    "delete from  USER_MASTER where COMPANY_CD = ? and LOGIN_ID = ? ;",
-    [req.params.key1, req.params.key2],
-    (err, rows) => {
-      if (err) {
-        console.log("err: " + err)
-        res.status(500).send(err)
-      }
-      res.status(204).send()
-    }
-  )
-
+  try{
+    await mysqlPool.query(
+      "delete from  USER_MASTER where COMPANY_CD = ? and LOGIN_ID = ? ;",
+      [req.params.key1, req.params.key2])
+    res.status(204).send()
+  }catch(err){
+    console.log("err: " + err)
+    res.status(500).send(err)
+  }
 })
